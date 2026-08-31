@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <title>Commish branching-flow mark</title>
-  <path d="M8 32h16" stroke="#4055ff" stroke-width="8" stroke-linecap="round"/>
-  <path d="M24 32c12 0 14-18 28-18h4" stroke="#38c8f2" stroke-width="8" stroke-linecap="round"/>
-  <path d="M24 32h32" stroke="#f4c64e" stroke-width="8" stroke-linecap="round"/>
-  <path d="M24 32c12 0 14 18 28 18h4" stroke="#ff6558" stroke-width="8" stroke-linecap="round"/>
-</svg>
