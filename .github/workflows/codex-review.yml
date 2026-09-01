@@ -1,0 +1,14 @@
+name: Codex review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  codex_review:
+    if: ${{ !github.event.pull_request.draft }}
+    uses: oftring-ventures/.github/.github/workflows/codex-pr-review.yml@d931ce24c55ebbf59dc59cf89341fbd876ac6a7e
+    secrets: inherit
