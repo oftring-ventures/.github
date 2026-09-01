@@ -1,0 +1,126 @@
+name: Reusable Codex pull request review
+
+on:
+  workflow_call:
+    secrets:
+      OPENAI_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Codex review
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.OPENAI_API_KEY != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: codex-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    outputs:
+      result: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - name: Check out pull request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Codex review
+        id: codex
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.3-codex
+          effort: medium
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
+          codex-args: '["--ephemeral"]'
+          output-schema: |
+            {
+              "type": "object",
+              "properties": {
+                "findings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "priority": {"type": "integer", "minimum": 0, "maximum": 3},
+                      "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                      "title": {"type": "string", "minLength": 1, "maxLength": 120},
+                      "body": {"type": "string", "minLength": 1},
+                      "path": {"type": "string", "minLength": 1},
+                      "start_line": {"type": "integer", "minimum": 1},
+                      "end_line": {"type": "integer", "minimum": 1}
+                    },
+                    "required": ["priority", "confidence", "title", "body", "path", "start_line", "end_line"],
+                    "additionalProperties": false
+                  }
+                },
+                "summary": {"type": "string"}
+              },
+              "required": ["findings", "summary"],
+              "additionalProperties": false
+            }
+          prompt: |
+            You are a strict code reviewer for pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            Review only changes introduced by this pull request. Use the base commit ${{ github.event.pull_request.base.sha }} and head commit ${{ github.event.pull_request.head.sha }} to scope the diff. Follow applicable AGENTS.md instructions.
+
+            Report only actionable defects affecting correctness, security, authorization, data loss, payments, migrations, or production reliability. Do not report style, pre-existing issues, speculative concerns, or missing tests unless a concrete introduced defect makes them necessary.
+
+            Every finding must cite changed lines, use priority P0 through P3 (P0 critical, P1 high, P2 medium, P3 low), and include a confidence from 0 to 1. The CI gate blocks only P0/P1 findings with confidence at least 0.85. Return an empty findings list when no qualifying issue exists.
+
+  gate:
+    name: Codex review gate
+    needs: review
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      REVIEW_RESULT: ${{ needs.review.outputs.result }}
+      REVIEW_JOB_RESULT: ${{ needs.review.result }}
+      IS_INTERNAL_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - name: Enforce review findings
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$IS_INTERNAL_PR" != "true" ]; then
+            echo "Codex review is skipped for fork pull requests because secrets are intentionally unavailable."
+            exit 0
+          fi
+
+          if [ "$HAS_OPENAI_KEY" != "true" ]; then
+            echo "::error title=Codex configuration::OPENAI_API_KEY is unavailable to this repository."
+            exit 1
+          fi
+
+          if [ "$REVIEW_JOB_RESULT" != "success" ]; then
+            echo "::error::Codex review did not complete successfully (result: $REVIEW_JOB_RESULT)."
+            exit 1
+          fi
+
+          node <<'NODE'
+          const review = JSON.parse(process.env.REVIEW_RESULT);
+          const findings = review.findings || [];
+          const blocking = [];
+
+          for (const finding of findings) {
+            const annotation = finding.priority <= 1 && finding.confidence >= 0.85 ? "error" : "warning";
+            const endLine = Math.max(finding.start_line, finding.end_line);
+            const message = `[P${finding.priority}, ${(finding.confidence * 100).toFixed(0)}%] ${finding.title}: ${finding.body}`;
+            console.log(`::${annotation} file=${finding.path},line=${finding.start_line},endLine=${endLine},title=${finding.title.replace(/[,\r\n]/g, " ")}::${message.replace(/[\r\n]/g, " ")}`);
+            if (annotation === "error") blocking.push(finding);
+          }
+
+          console.log(review.summary || "Codex review completed.");
+          if (blocking.length > 0) {
+            console.error(`Codex review gate blocked this pull request: ${blocking.length} high-confidence P0/P1 finding(s).`);
+            process.exit(1);
+          }
+          NODE
