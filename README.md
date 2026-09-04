@@ -53,8 +53,9 @@ private caller reports or ledgers into this public configuration repository.
 
 Callers must grant `contents: read` and `actions: read`, inherit the selected
 `OPENAI_API_KEY` secret, and pin the reusable workflow to a reviewed commit.
-The organization repository self-tests its candidate workflow through a local
-workflow reference; consumer repositories retain immutable pins.
+The organization caller also uses an immutable pin. Validate a candidate
+revision before advancing callers; a caller pin is not a substitute for review
+and protection of changes to CI configuration itself.
 
 Configuration is checked before checkout or CLI installation. Dependabot is
 explicitly permitted as a bot, but requires a **Dependabot secret** named

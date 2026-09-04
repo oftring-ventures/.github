@@ -11,5 +11,5 @@ permissions:
 jobs:
   codex_review:
     if: ${{ !github.event.pull_request.draft }}
-    uses: ./.github/workflows/codex-pr-review.yml
+    uses: oftring-ventures/.github/.github/workflows/codex-pr-review.yml@04eeb44565d6efaa7e8086a072d87583a75a9f61
     secrets: inherit
