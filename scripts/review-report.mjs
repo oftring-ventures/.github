@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { collectUsage } from './review-usage.mjs';
 
 const integer = (n, min, max) => Number.isSafeInteger(n) && n >= min && n <= max;
 const text = (s, max) => typeof s === 'string' && s.trim().length > 0 && s.length <= max;
@@ -80,5 +81,7 @@ export function reportFromEnvironment(env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  emitReport(reportFromEnvironment());
+  const report = reportFromEnvironment();
+  report.usage = await collectUsage();
+  emitReport(report);
 }

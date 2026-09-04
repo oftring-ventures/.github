@@ -19,3 +19,13 @@ Dispositions start as `untriaged`; model-supplied dispositions are discarded.
 Unknown usage is `null`, never zero. The workflow integration is a separate layer.
 
 Run the dependency-free tooling tests with `node --test scripts/*.test.mjs`.
+
+## Measured usage
+
+`scripts/review-usage.mjs` reads completed review-job logs for the exact workflow
+attempt using `actions: read`. It extracts only Codex JSONL `turn.completed`
+token counts and execution metadata; transcripts and signed log URLs are not
+saved. Cached input is a subset of input, not additional tokens. Failed or
+interrupted turns may lack usage, so totals are explicitly partial and are not
+a bill. API/log failures leave unknown measurements null without changing the
+review verdict. The caller should invoke the reusable review once per workflow.
