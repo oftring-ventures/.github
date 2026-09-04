@@ -29,3 +29,22 @@ saved. Cached input is a subset of input, not additional tokens. Failed or
 interrupted turns may lack usage, so totals are explicitly partial and are not
 a bill. API/log failures leave unknown measurements null without changing the
 review verdict. The caller should invoke the reusable review once per workflow.
+
+## Finding dispositions and ROI
+
+Keep a local/private ledger initialized as `{"schema_version":1,"entries":[]}`.
+After investigating a finding, record its artifact ID, a stable human-assigned
+logical issue key, reviewer, and evidence (fix/test/source reference):
+
+```sh
+node scripts/review-dispositions.mjs record ledger.json report.json FINDING_ID accepted identity-binding REVIEWER 'Fix commit and regression evidence'
+node scripts/review-dispositions.mjs summarize ledger.json reports/*.json
+```
+
+Allowed dispositions are `accepted`, `false_positive`, `partial`, `duplicate`,
+and `deferred`. Reuse an issue key across repeat reports of the same defect.
+The summary counts distinct accepted issues separately from report occurrences,
+deduplicates downloaded workflow attempts, and retains untriaged findings and
+unknown usage. Evidence is bound to the report's exact repository/PR/base/head.
+The ledger does not override CI or suppress future findings. Do not commit
+private caller reports or ledgers into this public configuration repository.
