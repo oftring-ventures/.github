@@ -77,7 +77,9 @@ export function reportFromEnvironment(env = process.env) {
   const base = env.REVIEW_BASE_SHA || pull?.base?.sha;
   const head = env.REVIEW_HEAD_SHA || pull?.head?.sha;
   const headRepository = env.REVIEW_HEAD_REPOSITORY || pull?.head?.repo?.full_name;
-  if (!pr || !base || !head) throw new Error('Pull request identity missing');
+  if (!pr || !base || !head || (explicit && !headRepository)) {
+    throw new Error('Pull request identity missing');
+  }
   return makeReport({ repository: env.GITHUB_REPOSITORY, pr: Number(pr), base, head,
     runId: env.GITHUB_RUN_ID, runAttempt: env.GITHUB_RUN_ATTEMPT,
     internal: headRepository === env.GITHUB_REPOSITORY,

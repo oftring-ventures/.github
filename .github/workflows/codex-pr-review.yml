@@ -42,7 +42,7 @@ jobs:
     name: Codex review
     if: >-
       inputs.mode != 'merge_group' &&
-      (inputs.head_repository || github.event.pull_request.head.repo.full_name) == github.repository
+      (inputs.mode == 'pr' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:

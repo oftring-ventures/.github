@@ -68,6 +68,23 @@ test('explicit admitted-review identity overrides a non-PR event', () => {
   assert.equal(report.status, 'passed');
 });
 
+test('explicit admitted-review identity fails closed without a head repository', () => {
+  const env = {
+    GITHUB_EVENT_PATH: new URL('../README.md', import.meta.url),
+    GITHUB_REPOSITORY: 'example/repo',
+    GITHUB_RUN_ID: '1',
+    GITHUB_RUN_ATTEMPT: '1',
+    REVIEW_PR_NUMBER: '7',
+    REVIEW_BASE_SHA: 'base',
+    REVIEW_HEAD_SHA: 'head',
+    REVIEW_HEAD_REPOSITORY: '',
+    HAS_OPENAI_KEY: 'true',
+    REVIEW_OUTCOME: 'success',
+    REVIEW_RESULT: review([]),
+  };
+  assert.throws(() => reportFromEnvironment(env), /identity missing/);
+});
+
 test('updates the controller-created check with findings', async () => {
   const originalFetch = globalThis.fetch;
   let request;
