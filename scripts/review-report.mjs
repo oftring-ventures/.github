@@ -71,17 +71,48 @@ export function emitReport(report, env = process.env) {
 }
 
 export function reportFromEnvironment(env = process.env) {
-  const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
-  const pr = event.pull_request;
-  if (!pr?.number || !pr.base?.sha || !pr.head?.sha) throw new Error('Pull request identity missing');
-  return makeReport({ repository: env.GITHUB_REPOSITORY, pr: pr.number, base: pr.base.sha, head: pr.head.sha,
+  const explicit = env.REVIEW_PR_NUMBER && env.REVIEW_BASE_SHA && env.REVIEW_HEAD_SHA;
+  const pull = explicit ? null : JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')).pull_request;
+  const pr = env.REVIEW_PR_NUMBER || pull?.number;
+  const base = env.REVIEW_BASE_SHA || pull?.base?.sha;
+  const head = env.REVIEW_HEAD_SHA || pull?.head?.sha;
+  const headRepository = env.REVIEW_HEAD_REPOSITORY || pull?.head?.repo?.full_name;
+  if (!pr || !base || !head) throw new Error('Pull request identity missing');
+  return makeReport({ repository: env.GITHUB_REPOSITORY, pr: Number(pr), base, head,
     runId: env.GITHUB_RUN_ID, runAttempt: env.GITHUB_RUN_ATTEMPT,
-    internal: pr.head.repo?.full_name === env.GITHUB_REPOSITORY,
+    internal: headRepository === env.GITHUB_REPOSITORY,
     hasKey: env.HAS_OPENAI_KEY === 'true', outcome: env.REVIEW_OUTCOME, result: env.REVIEW_RESULT });
+}
+
+export async function updateAdmittedCheck(report, env = process.env) {
+  if (!env.REVIEW_CHECK_RUN_ID) return;
+  const annotations = report.findings.slice(0, 50).map((finding) => ({
+    path: finding.path,
+    start_line: finding.start_line,
+    end_line: finding.end_line,
+    annotation_level: blocks(finding) ? 'failure' : 'warning',
+    title: finding.title,
+    message: `[P${finding.priority}, ${Math.round(finding.confidence * 100)}%] ${finding.body}`,
+  }));
+  const response = await fetch(
+    `${env.GITHUB_API_URL}/repos/${env.GITHUB_REPOSITORY}/check-runs/${env.REVIEW_CHECK_RUN_ID}`,
+    {
+      method: 'PATCH',
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      body: JSON.stringify({ status: 'completed', conclusion: allowed(report) ? 'success' : 'failure',
+        completed_at: new Date().toISOString(),
+        details_url: `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`,
+        output: { title: `Codex review: ${report.status}`,
+          summary: `${report.summary || 'Review did not produce a summary.'}\n\nFindings: ${report.findings.length}; blocking: ${report.findings.filter(blocks).length}.`,
+          annotations } }),
+    });
+  if (!response.ok) throw new Error(`Unable to update admitted Codex check: ${response.status} ${await response.text()}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const report = reportFromEnvironment();
   report.usage = await collectUsage();
   emitReport(report);
+  await updateAdmittedCheck(report);
 }
