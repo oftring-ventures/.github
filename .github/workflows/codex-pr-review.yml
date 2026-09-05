@@ -56,14 +56,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_BASE_SHA: ${{ inputs.base_sha }}
           EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
           EXPECTED_HEAD_REPOSITORY: ${{ inputs.head_repository }}
         run: |
           test -n "$PR_NUMBER"
+          test -n "$EXPECTED_BASE_SHA"
           test -n "$EXPECTED_HEAD_SHA"
           test -n "$EXPECTED_HEAD_REPOSITORY"
-          actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .head.sha, .head.repo.full_name] | @tsv')"
-          expected="open	false	main	${EXPECTED_HEAD_SHA}	${EXPECTED_HEAD_REPOSITORY}"
+          test "$EXPECTED_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .base.sha, .head.sha, .head.repo.full_name] | @tsv')"
+          expected="open	false	main	${EXPECTED_BASE_SHA}	${EXPECTED_HEAD_SHA}	${GITHUB_REPOSITORY}"
           test "$actual" = "$expected"
 
       - name: Verify review configuration
