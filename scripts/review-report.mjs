@@ -110,6 +110,21 @@ export async function updateAdmittedCheck(report, env = process.env) {
           annotations } }),
     });
   if (!response.ok) throw new Error(`Unable to update admitted Codex check: ${response.status} ${await response.text()}`);
+
+  const statusResponse = await fetch(
+    `${env.GITHUB_API_URL}/repos/${env.GITHUB_REPOSITORY}/statuses/${report.head}`,
+    {
+      method: 'POST',
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      body: JSON.stringify({ state: allowed(report) ? 'success' : 'failure',
+        context: 'codex_review / Codex review gate',
+        description: allowed(report) ? 'Admitted Codex review passed' : 'Admitted Codex review failed',
+        target_url: `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` }),
+    });
+  if (!statusResponse.ok) {
+    throw new Error(`Unable to update admitted Codex status: ${statusResponse.status} ${await statusResponse.text()}`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

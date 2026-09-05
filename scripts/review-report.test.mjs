@@ -85,11 +85,11 @@ test('explicit admitted-review identity fails closed without a head repository',
   assert.throws(() => reportFromEnvironment(env), /identity missing/);
 });
 
-test('updates the controller-created check with findings', async () => {
+test('updates the controller-created check and commit status with findings', async () => {
   const originalFetch = globalThis.fetch;
-  let request;
+  const requests = [];
   globalThis.fetch = async (url, options) => {
-    request = { url, options };
+    requests.push({ url, options });
     return new Response('{}', { status: 200 });
   };
   try {
@@ -99,10 +99,16 @@ test('updates the controller-created check with findings', async () => {
       GITHUB_REPOSITORY: 'example/repo', GITHUB_TOKEN: 'placeholder',
       GITHUB_SERVER_URL: 'https://github.test', GITHUB_RUN_ID: '10',
     });
-    assert.equal(request.url, 'https://api.github.test/repos/example/repo/check-runs/99');
-    const body = JSON.parse(request.options.body);
+    assert.equal(requests[0].url, 'https://api.github.test/repos/example/repo/check-runs/99');
+    const body = JSON.parse(requests[0].options.body);
     assert.equal(body.conclusion, 'failure');
     assert.equal(body.output.annotations[0].annotation_level, 'failure');
+    assert.equal(requests[1].url, 'https://api.github.test/repos/example/repo/statuses/head');
+    assert.deepEqual(JSON.parse(requests[1].options.body), {
+      state: 'failure', context: 'codex_review / Codex review gate',
+      description: 'Admitted Codex review failed',
+      target_url: 'https://github.test/example/repo/actions/runs/10',
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }
