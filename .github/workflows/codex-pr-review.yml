@@ -63,7 +63,7 @@ jobs:
           test -n "$EXPECTED_HEAD_SHA"
           test -n "$EXPECTED_HEAD_REPOSITORY"
           actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .head.sha, .head.repo.full_name] | @tsv')"
-          expected="$(printf 'open\\tfalse\\tmain\\t%s\\t%s' "$EXPECTED_HEAD_SHA" "$EXPECTED_HEAD_REPOSITORY")"
+          expected="open	false	main	${EXPECTED_HEAD_SHA}	${EXPECTED_HEAD_REPOSITORY}"
           test "$actual" = "$expected"
 
       - name: Verify review configuration
