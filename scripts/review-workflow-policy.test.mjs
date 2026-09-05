@@ -1,14 +1,17 @@
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import test from 'node:test';
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
 
 const workflow = readFileSync(
-  new URL('../.github/workflows/codex-pr-review.yml', import.meta.url),
-  'utf8',
+  new URL("../.github/workflows/codex-pr-review.yml", import.meta.url),
+  "utf8",
 );
 
-test('admitted review validates the complete same-repository PR identity', () => {
-  assert.match(workflow, /test "\$EXPECTED_HEAD_REPOSITORY" = "\$GITHUB_REPOSITORY"/);
+test("admitted review validates the complete same-repository PR identity", () => {
+  assert.match(
+    workflow,
+    /test "\$EXPECTED_HEAD_REPOSITORY" = "\$GITHUB_REPOSITORY"/,
+  );
   assert.match(
     workflow,
     /\.state, \.draft, \.base\.ref, \.base\.sha, \.head\.sha, \.head\.repo\.full_name/,
@@ -17,4 +20,9 @@ test('admitted review validates the complete same-repository PR identity', () =>
     workflow,
     /open\s+false\s+main\s+\$\{EXPECTED_BASE_SHA\}\s+\$\{EXPECTED_HEAD_SHA\}\s+\$\{GITHUB_REPOSITORY\}/,
   );
+});
+
+test("only admitted reviews trust the controller workflow actor", () => {
+  assert.match(workflow, /allow-bots: \$\{\{ inputs\.mode == 'pr' \}\}/);
+  assert.match(workflow, /allow-bot-users: ["']dependabot\[bot\]["']/);
 });

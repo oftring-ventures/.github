@@ -101,7 +101,8 @@ jobs:
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          allow-bot-users: 'dependabot[bot]'
+          allow-bots: ${{ inputs.mode == 'pr' }}
+          allow-bot-users: "dependabot[bot]"
           model: gpt-5.3-codex
           effort: medium
           permission-profile: ":read-only"
