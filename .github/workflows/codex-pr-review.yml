@@ -32,6 +32,7 @@ permissions:
   actions: read
   checks: write
   pull-requests: read
+  statuses: write
 
 concurrency:
   group: codex-review-${{ github.repository }}-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}
