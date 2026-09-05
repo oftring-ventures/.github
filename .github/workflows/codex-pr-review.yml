@@ -185,7 +185,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: oftring-ventures/.github
-          ref: dfd2625f6be9ef817b8417004654136e8e869934
+          ref: 8253da8ae2c2ddf14e922f3c56d6112aa8d8f0b1
           persist-credentials: false
       - name: Set up Node.js
         if: inputs.mode != 'merge_group'
