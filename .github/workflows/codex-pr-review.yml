@@ -31,6 +31,7 @@ permissions:
   contents: read
   actions: read
   checks: write
+  pull-requests: read
 
 concurrency:
   group: codex-review-${{ github.repository }}-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}
@@ -50,6 +51,21 @@ jobs:
       result: ${{ steps.codex.outputs.final-message }}
       outcome: ${{ steps.codex.outcome }}
     steps: &review_steps
+      - name: Verify admitted pull request identity
+        if: inputs.mode == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+          EXPECTED_HEAD_REPOSITORY: ${{ inputs.head_repository }}
+        run: |
+          test -n "$PR_NUMBER"
+          test -n "$EXPECTED_HEAD_SHA"
+          test -n "$EXPECTED_HEAD_REPOSITORY"
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .head.sha, .head.repo.full_name] | @tsv')"
+          expected="$(printf 'open\\tfalse\\tmain\\t%s\\t%s' "$EXPECTED_HEAD_SHA" "$EXPECTED_HEAD_REPOSITORY")"
+          test "$actual" = "$expected"
+
       - name: Verify review configuration
         env:
           HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
