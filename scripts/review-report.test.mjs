@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { allowed, annotation, makeReport, parseReview } from './review-report.mjs';
+import { allowed, annotation, makeReport, parseReview, reportFromEnvironment,
+  updateAdmittedCheck } from './review-report.mjs';
 
 const finding = { priority: 1, confidence: 0.85, title: 'Bind the actor', body: 'The row admits the wrong actor.',
   path: 'db/migration.sql', start_line: 3, end_line: 5 };
@@ -52,4 +53,57 @@ test('annotations cannot inject workflow commands or property delimiters', () =>
   assert.match(line, /title=x%2Cy%3Az%25%0D%0A/);
   assert.match(line, /text%0A::error::spoof/);
   assert.equal(parseReview(review([finding])).findings[0].path, 'db/migration.sql');
+});
+
+test('explicit admitted-review identity overrides a non-PR event', () => {
+  const env = {
+    GITHUB_EVENT_PATH: new URL('../README.md', import.meta.url),
+    GITHUB_REPOSITORY: 'example/repo', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
+    REVIEW_PR_NUMBER: '7', REVIEW_BASE_SHA: 'base', REVIEW_HEAD_SHA: 'head',
+    REVIEW_HEAD_REPOSITORY: 'example/repo', HAS_OPENAI_KEY: 'true',
+    REVIEW_OUTCOME: 'success', REVIEW_RESULT: review([]),
+  };
+  const report = reportFromEnvironment(env);
+  assert.equal(report.pr, 7);
+  assert.equal(report.status, 'passed');
+});
+
+test('explicit admitted-review identity fails closed without a head repository', () => {
+  const env = {
+    GITHUB_EVENT_PATH: new URL('../README.md', import.meta.url),
+    GITHUB_REPOSITORY: 'example/repo',
+    GITHUB_RUN_ID: '1',
+    GITHUB_RUN_ATTEMPT: '1',
+    REVIEW_PR_NUMBER: '7',
+    REVIEW_BASE_SHA: 'base',
+    REVIEW_HEAD_SHA: 'head',
+    REVIEW_HEAD_REPOSITORY: '',
+    HAS_OPENAI_KEY: 'true',
+    REVIEW_OUTCOME: 'success',
+    REVIEW_RESULT: review([]),
+  };
+  assert.throws(() => reportFromEnvironment(env), /identity missing/);
+});
+
+test('updates the controller-created check with findings', async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return new Response('{}', { status: 200 });
+  };
+  try {
+    const report = makeReport({ ...context, result: review([finding]) });
+    await updateAdmittedCheck(report, {
+      REVIEW_CHECK_RUN_ID: '99', GITHUB_API_URL: 'https://api.github.test',
+      GITHUB_REPOSITORY: 'example/repo', GITHUB_TOKEN: 'placeholder',
+      GITHUB_SERVER_URL: 'https://github.test', GITHUB_RUN_ID: '10',
+    });
+    assert.equal(request.url, 'https://api.github.test/repos/example/repo/check-runs/99');
+    const body = JSON.parse(request.options.body);
+    assert.equal(body.conclusion, 'failure');
+    assert.equal(body.output.annotations[0].annotation_level, 'failure');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

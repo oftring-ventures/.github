@@ -38,6 +38,21 @@ test('report CLI preserves verdicts and emits artifacts when usage retrieval fai
       assert.equal(report.usage.totals, null);
       assert.match(await readFile(outputPath, 'utf8'), new RegExp(`allowed=${expected === 'passed'}\\n`));
     }
+
+    const reportPath = join(dir, 'explicit-report.json');
+    const outputPath = join(dir, 'explicit-output');
+    await writeFile(outputPath, '');
+    await promisify(execFile)(process.execPath, ['scripts/review-report.mjs'], { env: {
+      PATH: process.env.PATH, GITHUB_EVENT_PATH: join(dir, 'event.json'), GITHUB_REPOSITORY: 'example/repo',
+      GITHUB_RUN_ID: '2', GITHUB_RUN_ATTEMPT: '1', HAS_OPENAI_KEY: 'true', REVIEW_OUTCOME: 'success',
+      REVIEW_RESULT: '{"summary":"ok","findings":[]}', REVIEW_PR_NUMBER: '9', REVIEW_BASE_SHA: 'explicit-base',
+      REVIEW_HEAD_SHA: 'explicit-head', REVIEW_HEAD_REPOSITORY: 'example/repo', REPORT_PATH: reportPath,
+      GITHUB_OUTPUT: outputPath, GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+      GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`, GITHUB_TOKEN: 'placeholder',
+    } });
+    const explicit = JSON.parse(await readFile(reportPath, 'utf8'));
+    assert.equal(explicit.pr, 9);
+    assert.equal(explicit.base, 'explicit-base');
   } finally {
     server.close();
     await rm(dir, { recursive: true, force: true });

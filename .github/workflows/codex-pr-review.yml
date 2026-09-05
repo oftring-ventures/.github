@@ -2,6 +2,27 @@ name: Reusable Codex pull request review
 
 on:
   workflow_call:
+    inputs:
+      mode:
+        description: Legacy pull-request review, admitted PR review, or merge-group bridge
+        required: false
+        default: pull_request
+        type: string
+      pr_number:
+        required: false
+        type: string
+      base_sha:
+        required: false
+        type: string
+      head_sha:
+        required: false
+        type: string
+      head_repository:
+        required: false
+        type: string
+      check_run_id:
+        required: false
+        type: string
     secrets:
       OPENAI_API_KEY:
         required: false
@@ -9,15 +30,19 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: write
+  pull-requests: read
 
 concurrency:
-  group: codex-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+  group: codex-review-${{ github.repository }}-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
     name: Codex review
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    if: >-
+      inputs.mode != 'merge_group' &&
+      (inputs.mode == 'pr' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -26,6 +51,24 @@ jobs:
       result: ${{ steps.codex.outputs.final-message }}
       outcome: ${{ steps.codex.outcome }}
     steps: &review_steps
+      - name: Verify admitted pull request identity
+        if: inputs.mode == 'pr'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_BASE_SHA: ${{ inputs.base_sha }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
+          EXPECTED_HEAD_REPOSITORY: ${{ inputs.head_repository }}
+        run: |
+          test -n "$PR_NUMBER"
+          test -n "$EXPECTED_BASE_SHA"
+          test -n "$EXPECTED_HEAD_SHA"
+          test -n "$EXPECTED_HEAD_REPOSITORY"
+          test "$EXPECTED_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .base.sha, .head.sha, .head.repo.full_name] | @tsv')"
+          expected="open	false	main	${EXPECTED_BASE_SHA}	${EXPECTED_HEAD_SHA}	${GITHUB_REPOSITORY}"
+          test "$actual" = "$expected"
+
       - name: Verify review configuration
         env:
           HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
@@ -40,19 +83,19 @@ jobs:
             exit 1
           fi
 
-      - name: Debounce changes and spread review starts
+      - name: Debounce legacy pull-request events
+        if: inputs.mode == 'pull_request'
         run: sleep "$((REVIEW_DELAY_SECONDS + RANDOM % 16))"
 
       - name: Check out pull request head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.head_sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Run Codex review
         id: codex
-        # Execution errors are retried once on a fresh runner; findings are not.
         continue-on-error: true
         timeout-minutes: 8
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
@@ -91,9 +134,9 @@ jobs:
               "additionalProperties": false
             }
           prompt: |
-            You are a strict code reviewer for pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            You are a strict code reviewer for pull request #${{ inputs.pr_number || github.event.pull_request.number }} in ${{ github.repository }}.
 
-            Review only changes introduced by this pull request. Use the base commit ${{ github.event.pull_request.base.sha }} and head commit ${{ github.event.pull_request.head.sha }} to scope the diff. Follow applicable AGENTS.md instructions.
+            Review only changes introduced by this pull request. Use the base commit ${{ inputs.base_sha || github.event.pull_request.base.sha }} and head commit ${{ inputs.head_sha || github.event.pull_request.head.sha }} to scope the diff. Follow applicable AGENTS.md instructions.
 
             Report only actionable defects affecting correctness, security, authorization, data loss, payments, migrations, or production reliability. Do not report style, pre-existing issues, speculative concerns, or missing tests unless a concrete introduced defect makes them necessary.
 
@@ -108,13 +151,12 @@ jobs:
   retry:
     name: Codex review retry
     needs: review
-    if: ${{ !cancelled() && needs.review.outputs.outcome == 'failure' }}
+    if: ${{ inputs.mode != 'merge_group' && !cancelled() && needs.review.outputs.outcome == 'failure' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       REVIEW_DELAY_SECONDS: 60
     outputs: *review_outputs
-    # drop-sudo is irreversible, so retry on a new runner with the same base/head.
     steps: *review_steps
 
   gate:
@@ -127,32 +169,44 @@ jobs:
       REVIEW_RESULT: ${{ needs.retry.outputs.result || needs.review.outputs.result }}
       REVIEW_OUTCOME: ${{ needs.retry.outputs.outcome || needs.review.outputs.outcome }}
       HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+      REVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      REVIEW_BASE_SHA: ${{ inputs.base_sha }}
+      REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+      REVIEW_HEAD_REPOSITORY: ${{ inputs.head_repository }}
+      REVIEW_CHECK_RUN_ID: ${{ inputs.check_run_id }}
     steps:
+      - name: Bridge the exact-head review into the merge group
+        if: inputs.mode == 'merge_group'
+        run: echo 'The merge queue admitted only PR heads whose required Codex review gate passed.'
       - name: Check out trusted reporting tools
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: inputs.mode != 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5.0.0
         with:
           repository: oftring-ventures/.github
-          ref: 2c150e59b3c8386822aeb7feee625505c635e6c2
+          ref: dfd2625f6be9ef817b8417004654136e8e869934
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Set up Node.js
+        if: inputs.mode != 'merge_group'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4.1.0
         with:
           node-version: 24
       - name: Record findings and measured usage
+        if: inputs.mode != 'merge_group'
         id: report
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPORT_PATH: ${{ runner.temp }}/codex-review-report.json
         run: node scripts/review-report.mjs
       - name: Save review evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ always() && inputs.mode != 'merge_group' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: codex-review-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/codex-review-report.json
           retention-days: 30
           if-no-files-found: error
       - name: Enforce review findings
-        if: ${{ always() }}
+        if: inputs.mode != 'merge_group'
         env:
           ALLOWED: ${{ steps.report.outputs.allowed }}
         run: test "$ALLOWED" = true
