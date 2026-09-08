@@ -80,6 +80,12 @@ The prompt requires concrete triggers and source evidence, checking database
 constraints, inherited API security, and actual query semantics before claiming
 a defect. Severity and confidence must follow demonstrated impact.
 
+After exact-head checkout, a trusted workflow step prepares the PR patch from its
+unique merge-base to that head. Newer target-branch changes are not PR deletions.
+Missing commits, checkout mismatch, unrelated histories and ambiguous merge bases
+fail before model invocation. The supplied target tip remains the separate
+admission/report identity checkpoint; no approval threshold or merge gate changes.
+
 The separate gate runner checks out only the pinned reporting tools, never PR
 code. It uploads `codex-review-RUN_ID-RUN_ATTEMPT` for 30 days before enforcing
 the original blocking threshold. Download it with
