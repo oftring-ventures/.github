@@ -95,6 +95,26 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Prepare introduced-change review scope
+        id: review_scope
+        env:
+          BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ inputs.head_sha || github.event.pull_request.head.sha }}
+        run: |
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git cat-file -e "${HEAD_SHA}^{commit}"
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          git merge-base --all "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/review-merge-bases"
+          mapfile -t merge_bases < "$RUNNER_TEMP/review-merge-bases"
+          test "${#merge_bases[@]}" -eq 1
+          merge_base="${merge_bases[0]}"
+          [[ "$merge_base" =~ ^[0-9a-f]{40}$ ]]
+          patch_path="$RUNNER_TEMP/review-pr.patch"
+          git diff --no-ext-diff --no-textconv "$merge_base" "$HEAD_SHA" -- > "$patch_path"
+          printf 'merge_base=%s\npatch_path=%s\n' "$merge_base" "$patch_path" >> "$GITHUB_OUTPUT"
+
       - name: Run Codex review
         id: codex
         continue-on-error: true
@@ -138,7 +158,7 @@ jobs:
           prompt: |
             You are a strict code reviewer for pull request #${{ inputs.pr_number || github.event.pull_request.number }} in ${{ github.repository }}.
 
-            Review only changes introduced by this pull request. Use the base commit ${{ inputs.base_sha || github.event.pull_request.base.sha }} and head commit ${{ inputs.head_sha || github.event.pull_request.head.sha }} to scope the diff. Follow applicable AGENTS.md instructions.
+            Review only changes introduced by this pull request. The trusted workflow prepared the PR patch at ${{ steps.review_scope.outputs.patch_path }} using merge-base ${{ steps.review_scope.outputs.merge_base }} and exact head ${{ inputs.head_sha || github.event.pull_request.head.sha }}. Read that patch to scope introduced changes. The validated target tip ${{ inputs.base_sha || github.event.pull_request.base.sha }} is an identity checkpoint, not the diff origin: comparing it directly to the head can mislabel newer target-branch changes as PR deletions. Any additional diff must compare the supplied merge-base to the exact head. Follow applicable AGENTS.md instructions.
 
             Report only actionable defects affecting correctness, security, authorization, data loss, payments, migrations, or production reliability. Do not report style, pre-existing issues, speculative concerns, or missing tests unless a concrete introduced defect makes them necessary.
 
