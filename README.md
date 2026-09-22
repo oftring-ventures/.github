@@ -4,7 +4,7 @@ This repository hosts reusable GitHub Actions workflows for Oftring Ventures.
 
 ## Codex pull request review
 
-`codex-pr-review.yml` runs a read-only Codex review on internal pull requests. It uses `gpt-5.3-codex` with `medium` reasoning effort and blocks only high-confidence P0/P1 findings. Callers must inherit the selected-repository `OPENAI_API_KEY` organization secret. Admission-aware callers can review a quiet PR head through explicit identity inputs and a controller-created check run. `merge_group` mode bridges that exact-head verdict without another model invocation on GitHub's synthetic commit.
+`codex-pr-review.yml` runs a read-only Codex review on internal pull requests. It uses `gpt-5.3-codex` with `medium` reasoning effort and blocks only high-confidence P0/P1 findings. Callers must inherit the selected-repository `OPENAI_API_KEY` organization secret. Admission-aware callers can review a quiet PR head through explicit identity inputs and a controller-created check run. A stacked layer whose base is not `main` is reviewed only when the supplied base is the exact current head of the single open same-repository PR whose head branch is that base. `merge_group` mode bridges that exact-head verdict without another model invocation on GitHub's synthetic commit.
 
 Fork pull requests are intentionally skipped because GitHub withholds Actions secrets from untrusted fork code. Review these manually or through the native Codex GitHub review surface.
 
