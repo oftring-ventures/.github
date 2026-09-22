@@ -18,8 +18,21 @@ test("admitted review validates the complete same-repository PR identity", () =>
   );
   assert.match(
     workflow,
-    /open\s+false\s+main\s+\$\{EXPECTED_BASE_SHA\}\s+\$\{EXPECTED_HEAD_SHA\}\s+\$\{GITHUB_REPOSITORY\}/,
+    /expected="open\s+false\s+\$\{EXPECTED_BASE_SHA\}\s+\$\{EXPECTED_HEAD_SHA\}\s+\$\{GITHUB_REPOSITORY\}"/,
   );
+});
+
+test("a stacked review is bound to its open parent PR's exact head", () => {
+  assert.match(workflow, /if \[ "\$base_ref" != main \]; then/);
+  assert.match(
+    workflow,
+    /-f head="\$\{GITHUB_REPOSITORY_OWNER\}:\$\{base_ref\}"/,
+  );
+  assert.match(
+    workflow,
+    /select\(\.head\.repo\.full_name == env\.GITHUB_REPOSITORY\) \| \.head\.sha\] \| @tsv/,
+  );
+  assert.match(workflow, /test "\$parent" = "\$EXPECTED_BASE_SHA"/);
 });
 
 test("only admitted reviews trust the controller workflow actor", () => {

@@ -66,9 +66,20 @@ jobs:
           test -n "$EXPECTED_HEAD_SHA"
           test -n "$EXPECTED_HEAD_REPOSITORY"
           test "$EXPECTED_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
-          actual="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .base.sha, .head.sha, .head.repo.full_name] | @tsv')"
-          expected="open	false	main	${EXPECTED_BASE_SHA}	${EXPECTED_HEAD_SHA}	${GITHUB_REPOSITORY}"
+          IFS=$'\t' read -r state draft base_ref base_sha head_sha head_repository < <(
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.state, .draft, .base.ref, .base.sha, .head.sha, .head.repo.full_name] | @tsv')
+          actual="${state}	${draft}	${base_sha}	${head_sha}	${head_repository}"
+          expected="open	false	${EXPECTED_BASE_SHA}	${EXPECTED_HEAD_SHA}	${GITHUB_REPOSITORY}"
           test "$actual" = "$expected"
+          test -n "$base_ref"
+          if [ "$base_ref" != main ]; then
+            # A stacked layer is reviewed only against the exact current head of
+            # the single open same-repository PR whose head branch is its base.
+            parent="$(gh api -X GET "repos/${GITHUB_REPOSITORY}/pulls" -f state=open \
+              -f head="${GITHUB_REPOSITORY_OWNER}:${base_ref}" \
+              --jq '[.[] | select(.head.repo.full_name == env.GITHUB_REPOSITORY) | .head.sha] | @tsv')"
+            test "$parent" = "$EXPECTED_BASE_SHA"
+          fi
 
       - name: Verify review configuration
         env:
