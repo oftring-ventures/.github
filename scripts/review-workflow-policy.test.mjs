@@ -35,6 +35,21 @@ test("a stacked review is bound to its open parent PR's exact head", () => {
   assert.match(workflow, /test "\$parent" = "\$EXPECTED_BASE_SHA"/);
 });
 
+test("every Codex step pins the CLI to an exact release, never npm latest", () => {
+  const steps = [
+    ...workflow.matchAll(
+      /^( +)uses: openai\/codex-action@[^\n]*\n\1with:\n((?:\1 [^\n]*\n|\n)*)/gm,
+    ),
+  ];
+  assert.ok(steps.length > 0);
+  for (const [, indent, inputs] of steps) {
+    assert.match(
+      inputs,
+      new RegExp(`^${indent}  codex-version: "?\\d+\\.\\d+\\.\\d+"?$`, "m"),
+    );
+  }
+});
+
 test("only admitted reviews trust the controller workflow actor", () => {
   assert.match(workflow, /allow-bots: \$\{\{ inputs\.mode == 'pr' \}\}/);
   assert.match(workflow, /allow-bot-users: ["']dependabot\[bot\]["']/);
