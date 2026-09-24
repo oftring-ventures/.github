@@ -132,6 +132,9 @@ jobs:
         timeout-minutes: 8
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
         with:
+          # Exact npm release of the Codex CLI and its API-key proxy. Empty
+          # installs whatever `latest` is at run time.
+          codex-version: "0.156.1"
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           allow-bots: ${{ inputs.mode == 'pr' }}
           allow-bot-users: "dependabot[bot]"

@@ -60,6 +60,11 @@ The organization caller also uses an immutable pin. Validate a candidate
 revision before advancing callers; a caller pin is not a substitute for review
 and protection of changes to CI configuration itself.
 
+The Codex CLI and the Responses API proxy that receives `OPENAI_API_KEY` are
+installed at one exact npm release (`codex-version`); an empty value installs
+whatever `latest` is at run time. Advance it only in a reviewed change, after
+that release's platform packages are published.
+
 Configuration is checked before checkout or CLI installation. Dependabot is
 explicitly permitted as a bot, but requires a **Dependabot secret** named
 `OPENAI_API_KEY`, separately from the Actions secret. Provision it through
