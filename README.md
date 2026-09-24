@@ -51,8 +51,9 @@ private caller reports or ledgers into this public configuration repository.
 
 ## Workflow operation
 
-Callers must grant `contents: read`, `actions: read`, `checks: write`, and
-`pull-requests: read`, inherit the selected `OPENAI_API_KEY` secret, and pin the
+Callers must grant `contents: read`, `actions: read`, `checks: write`,
+`pull-requests: read`, and `statuses: write`, even in legacy mode, or the call
+fails to start. They inherit the selected `OPENAI_API_KEY` secret and pin the
 reusable workflow to a reviewed commit. Admission-aware callers pass the
 PR/base/head identity, internal head repository, mode, and queued check-run ID;
 legacy pull-request callers may keep using event context.
