@@ -7,9 +7,12 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: write
+  pull-requests: read
+  statuses: write
 
 jobs:
   codex_review:
     if: ${{ !github.event.pull_request.draft }}
-    uses: oftring-ventures/.github/.github/workflows/codex-pr-review.yml@04eeb44565d6efaa7e8086a072d87583a75a9f61
+    uses: oftring-ventures/.github/.github/workflows/codex-pr-review.yml@0b8c58b73fddadaa69ce46deaec79c4ef63513d0
     secrets: inherit
